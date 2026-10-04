@@ -1,0 +1,37 @@
+name: stock-bot
+on:
+  schedule:
+    - cron: "0 23 * * *"
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "report 또는 sync"
+        default: "report"
+permissions:
+  contents: write
+concurrency:
+  group: stock-bot
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Run
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 12 * * *" ]; then MODE=sync
+          else MODE="${{ github.event.inputs.mode || 'report' }}"; fi
+          python report.py "$MODE"
+      - name: Save state
+        run: |
+          git config user.name "stock-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add holdings.json config.json state.json
+          git diff --cached --quiet || (git commit -m "update state [skip ci]" && git push)
